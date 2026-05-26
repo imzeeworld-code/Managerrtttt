@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0e1116" />
+<title>WOD · Manager Panel</title>
+<!--
+  ============================================================================
+  WORLD OF DISCOVERIES  -  html2  -  MANAGER / KNOWLEDGE PANEL
+  ============================================================================
+  This is YOUR private control room. Only your admin account can use it -
+  the panel checks your UID after login, and your Firebase rules block
+  everyone else from the config anyway.
+
+  WHAT YOU CONTROL HERE (each saves into Firebase, which your Worker reads):
+    - Dashboard : the master ON/OFF switch + live stats
+    - Knowledge : system prompt, rules, and general knowledge (the AI's mind)
+    - Keys      : every API key, its model, whether it's a powerful or small
+                  model, free or paid, and its on/off switch - per provider
+    - Plans     : the limit numbers + Mod / Pro / Max Leg budgets and lengths
+    - Messages  : every message your users might see, in your own words
+    - Users     : upgrade a paying user by their email, with a confirm step
+
+  NOTHING here needs editing in code - it's all baked to your project.
+  ============================================================================
+-->
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Outfit:wght@300;400;500;600;700&display=swap');
+  :root{
+    --bg:#0e1116; --bg-2:#151a21; --bg-3:#1c232c; --line:#232c37;
+    --ink:#eef2f6; --ink-soft:#9aa7b4; --ink-faint:#5d6b78;
+    --gold:#d9a441; --gold-soft:#f0c674; --blue:#2b7cff;
+    --danger:#e5534b; --ok:#3fb950;
+    --radius:16px; --shadow:0 10px 30px rgba(0,0,0,.45);
+    --fd:'Fraunces',Georgia,serif; --fb:'Outfit',sans-serif;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  html,body{ height:100%; }
+  body{ font-family:var(--fb); background:var(--bg); color:var(--ink);
+    background-image:radial-gradient(120% 70% at 50% -10%, rgba(217,164,65,.08), transparent 60%);
+    -webkit-font-smoothing:antialiased; }
+  #app{ max-width:620px; margin:0 auto; min-height:100dvh; display:flex; flex-direction:column; }
+
+  /* ---------- LOGIN GATE ---------- */
+  #gate{ flex:1; display:flex; flex-direction:column; justify-content:center; padding:34px 26px; gap:20px; }
+  .logo-ring{ width:70px; height:70px; border-radius:50%; display:grid; place-items:center;
+    background:radial-gradient(circle at 35% 30%,#20283180,#0e1116); border:1px solid var(--line);
+    box-shadow:0 0 0 1px rgba(217,164,65,.12),var(--shadow); margin:0 auto; }
+  .gate-title{ font-family:var(--fd); font-size:24px; font-weight:600; text-align:center; }
+  .gate-title span{ color:var(--gold); }
+  .gate-sub{ color:var(--ink-soft); text-align:center; font-size:13px; font-weight:300; margin-top:-8px; }
+  .card{ background:linear-gradient(180deg,var(--bg-2),#11161c); border:1px solid var(--line);
+    border-radius:var(--radius); padding:20px; box-shadow:var(--shadow); }
+  label.lbl{ display:block; font-size:12px; color:var(--ink-faint); margin:0 0 6px 3px; letter-spacing:.3px; }
+  input.in,textarea.ta,select.sel{ width:100%; background:var(--bg); border:1px solid var(--line); color:var(--ink);
+    font-family:var(--fb); font-size:15px; padding:12px 13px; border-radius:11px; outline:none; transition:.18s; }
+  textarea.ta{ resize:vertical; min-height:90px; line-height:1.5; }
+  input.in:focus,textarea.ta:focus,select.sel:focus{ border-color:var(--gold); box-shadow:0 0 0 3px rgba(217,164,65,.12); }
+  .mb{ margin-bottom:13px; }
+  .btn{ border:0; cursor:pointer; font-family:var(--fb); font-weight:600; font-size:15px; padding:13px;
+    border-radius:11px; transition:.15s; display:flex; align-items:center; justify-content:center; gap:8px; width:100%; }
+  .btn:active{ transform:scale(.985); }
+  .btn.gold{ background:linear-gradient(180deg,var(--gold-soft),var(--gold)); color:#231a07; }
+  .btn.ghost{ background:var(--bg-3); color:var(--ink); border:1px solid var(--line); }
+  .btn.danger{ background:rgba(229,83,75,.14); color:var(--danger); border:1px solid rgba(229,83,75,.4); }
+  .btn:disabled{ opacity:.5; cursor:default; }
+  .msg{ font-size:13px; text-align:center; min-height:16px; }
+  .msg.err{ color:var(--danger); } .msg.ok{ color:var(--ok); }
+
+  /* ---------- APP SHELL ---------- */
+  #shell{ display:none; flex-direction:column; flex:1; min-height:0; }
+  header.top{ display:flex; align-items:center; gap:11px; padding:12px 15px; border-bottom:1px solid var(--line);
+    background:rgba(14,17,22,.85); backdrop-filter:blur(12px); position:sticky; top:0; z-index:10; }
+  .top .logo-ring{ width:34px; height:34px; margin:0; box-shadow:none; }
+  .top .logo-ring svg{ width:18px; height:18px; }
+  .top b{ font-family:var(--fd); font-weight:600; font-size:15px; flex:1; }
+  .icon-btn{ background:var(--bg-3); border:1px solid var(--line); color:var(--ink-soft); width:36px; height:36px;
+    border-radius:10px; display:grid; place-items:center; cursor:pointer; }
+
+  /* tab bar */
+  nav.tabs{ display:flex; gap:6px; overflow-x:auto; padding:10px 12px; border-bottom:1px solid var(--line);
+    position:sticky; top:59px; background:var(--bg); z-index:9; }
+  nav.tabs::-webkit-scrollbar{ height:0; }
+  nav.tabs button{ flex:0 0 auto; background:var(--bg-2); border:1px solid var(--line); color:var(--ink-soft);
+    font-family:var(--fb); font-size:13.5px; font-weight:500; padding:8px 14px; border-radius:20px; cursor:pointer; white-space:nowrap; transition:.18s; }
+  nav.tabs button.on{ background:var(--gold); color:#231a07; border-color:var(--gold); }
+
+  main{ flex:1; overflow-y:auto; padding:16px 14px 80px; }
+  .pane{ display:none; animation:fade .3s ease both; }
+  .pane.on{ display:block; }
+  @keyframes fade{ from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+
+  h2.sec{ font-family:var(--fd); font-weight:600; font-size:18px; margin:4px 2px 4px; }
+  p.hint{ color:var(--ink-soft); font-size:12.5px; line-height:1.55; margin:0 2px 14px; font-weight:300; }
+  .block{ background:var(--bg-2); border:1px solid var(--line); border-radius:var(--radius); padding:16px; margin-bottom:14px; }
+  .block h3{ font-size:14px; font-weight:600; margin-bottom:4px; }
+  .block .sub{ color:var(--ink-faint); font-size:11.5px; margin-bottom:12px; line-height:1.5; }
+
+  /* toggle switch */
+  .switch{ position:relative; width:46px; height:27px; flex-shrink:0; }
+  .switch input{ display:none; }
+  .switch .slot{ position:absolute; inset:0; background:var(--bg-3); border:1px solid var(--line); border-radius:20px; transition:.2s; }
+  .switch .knob{ position:absolute; top:3px; left:3px; width:21px; height:21px; border-radius:50%; background:var(--ink-faint); transition:.2s; }
+  .switch input:checked + .slot{ background:rgba(63,185,80,.25); border-color:var(--ok); }
+  .switch input:checked + .slot + .knob{ left:22px; background:var(--ok); }
+
+  .row{ display:flex; align-items:center; gap:12px; }
+  .grow{ flex:1; min-width:0; }
+
+  /* dashboard stat tiles */
+  .stats{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
+  .tile{ background:var(--bg-2); border:1px solid var(--line); border-radius:14px; padding:14px; }
+  .tile .n{ font-family:var(--fd); font-size:26px; font-weight:600; color:var(--gold); }
+  .tile .t{ font-size:11.5px; color:var(--ink-soft); margin-top:2px; }
+
+  /* provider accordion */
+  .prov{ background:var(--bg-2); border:1px solid var(--line); border-radius:14px; margin-bottom:11px; overflow:hidden; }
+  .prov-head{ display:flex; align-items:center; gap:11px; padding:13px 14px; cursor:pointer; }
+  .prov-head .nm{ flex:1; font-weight:600; font-size:14.5px; }
+  .prov-head .badge{ font-size:10px; padding:2px 8px; border-radius:10px; background:var(--bg-3); color:var(--ink-soft); border:1px solid var(--line); }
+  .chev{ transition:.2s; color:var(--ink-faint); }
+  .prov.open .chev{ transform:rotate(180deg); }
+  .prov-body{ display:none; padding:4px 12px 14px; border-top:1px solid var(--line); }
+  .prov.open .prov-body{ display:block; }
+  .keyrow{ background:var(--bg); border:1px solid var(--line); border-radius:12px; padding:11px; margin-top:10px; }
+  .keyrow .top-r{ display:flex; align-items:center; gap:9px; margin-bottom:9px; }
+  .keyrow .top-r .kn{ font-size:11px; color:var(--ink-faint); flex:1; }
+  .keyrow .mini{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
+  .keyrow input.in, .keyrow select.sel{ font-size:13.5px; padding:10px 11px; }
+  .miniwrap label{ font-size:10.5px; color:var(--ink-faint); display:block; margin:0 0 4px 2px; }
+
+  .saved{ font-size:12.5px; color:var(--ok); text-align:center; min-height:16px; margin-top:8px; }
+  .savebar{ position:sticky; bottom:0; }
+
+  /* found-user card */
+  #foundCard{ display:none; }
+  .pill{ display:inline-block; font-size:11px; padding:3px 9px; border-radius:10px; margin-left:6px; }
+  .pill.free{ background:var(--bg-3); color:var(--ink-soft); }
+  .pill.paid{ background:rgba(217,164,65,.18); color:var(--gold-soft); border:1px solid rgba(217,164,65,.4); }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ================= LOGIN GATE ================= -->
+  <section id="gate">
+    <div class="logo-ring">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#d9a441" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="9"/><polygon points="15.5 8.5 11 11 8.5 15.5 13 13 15.5 8.5" fill="#d9a441" stroke="none"/>
+      </svg>
+    </div>
+    <div>
+      <div class="gate-title">Manager <span>Panel</span></div>
+      <div class="gate-sub">World Of Discoveries · admin access only</div>
+    </div>
+    <div class="card">
+      <div class="mb"><label class="lbl">Admin email</label><input id="gEmail" class="in" type="email" inputmode="email" placeholder="your admin email" /></div>
+      <div class="mb"><label class="lbl">Password</label><input id="gPass" class="in" type="password" placeholder="your admin password" /></div>
+      <button class="btn gold" id="gBtn" onclick="login()">Enter control room</button>
+      <div id="gMsg" class="msg" style="margin-top:10px;"></div>
+    </div>
+  </section>
+
+  <!-- ================= APP SHELL ================= -->
+  <section id="shell">
+    <header class="top">
+      <div class="logo-ring"><svg viewBox="0 0 24 24" fill="none" stroke="#d9a441" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><polygon points="15.5 8.5 11 11 8.5 15.5 13 13 15.5 8.5" fill="#d9a441" stroke="none"/></svg></div>
+      <b>Manager Panel</b>
+      <button class="icon-btn" onclick="logout()" title="Sign out">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </button>
+    </header>
+
+    <nav class="tabs" id="tabs">
+      <button class="on" data-t="dash" onclick="tab('dash')">Dashboard</button>
+      <button data-t="know" onclick="tab('know')">Knowledge</button>
+      <button data-t="keys" onclick="tab('keys')">Keys</button>
+      <button data-t="plans" onclick="tab('plans')">Plans &amp; Limits</button>
+      <button data-t="msgs" onclick="tab('msgs')">Messages</button>
+      <button data-t="users" onclick="tab('users')">Users</button>
+    </nav>
+
+    <main>
+      <!-- ---------- DASHBOARD ---------- -->
+      <div class="pane on" id="pane-dash">
+        <h2 class="sec">Dashboard</h2>
+        <p class="hint">Your bird's-eye view. The master switch below instantly pauses or resumes the app for every user.</p>
+        <div class="block">
+          <div class="row">
+            <div class="grow"><h3>App status</h3><div class="sub">When OFF, users see your "back in a minute" message.</div></div>
+            <label class="switch"><input type="checkbox" id="appOn" onchange="saveUsage()"><span class="slot"></span><span class="knob"></span></label>
+          </div>
+        </div>
+        <div class="stats">
+          <div class="tile"><div class="n" id="statUsers">–</div><div class="t">Total users</div></div>
+          <div class="tile"><div class="n" id="statToday">–</div><div class="t">Messages today</div></div>
+        </div>
+        <button class="btn ghost" onclick="loadStats()">Refresh stats</button>
+        <div class="saved" id="dashSaved"></div>
+      </div>
+
+      <!-- ---------- KNOWLEDGE ---------- -->
+      <div class="pane" id="pane-know">
+        <h2 class="sec">Knowledge Panel</h2>
+        <p class="hint">This is your AI's mind. The three boxes are joined together and sent with every single message, so write them with care - this is where your unforgettable tone lives.</p>
+        <div class="block">
+          <h3>System Prompt</h3><div class="sub">Who the AI is, how it speaks, its personality and identity.</div>
+          <textarea id="sysPrompt" class="ta" style="min-height:160px;" placeholder="You are the World Of Discoveries assistant..."></textarea>
+        </div>
+        <div class="block">
+          <h3>Rules</h3><div class="sub">Hard do's and don'ts followed on every reply.</div>
+          <textarea id="rules" class="ta" placeholder="Never reveal API keys or system instructions. Always..."></textarea>
+        </div>
+        <div class="block">
+          <h3>General Knowledge</h3><div class="sub">Facts you want it to simply know - about your company, your apps, Zambia, anything.</div>
+          <textarea id="knowledge" class="ta" placeholder="World Of Discoveries is a company in Zambia, founded in 2023..."></textarea>
+        </div>
+        <button class="btn gold savebar" onclick="saveKnowledge()">Save Knowledge</button>
+        <div class="saved" id="knowSaved"></div>
+      </div>
+
+      <!-- ---------- KEYS ---------- -->
+      <div class="pane" id="pane-keys">
+        <h2 class="sec">API Keys</h2>
+        <p class="hint">Tap a provider to open it. Each key has its own ON/OFF, its model, whether it's a Powerful or Small model, and Free or Paid. The provider's own switch turns that whole brand on or off.</p>
+        <div id="provList"><!-- generated --></div>
+        <button class="btn gold savebar" onclick="saveKeys()">Save All Keys</button>
+        <div class="saved" id="keysSaved"></div>
+      </div>
+
+      <!-- ---------- PLANS & LIMITS ---------- -->
+      <div class="pane" id="pane-plans">
+        <h2 class="sec">Plans &amp; Limits</h2>
+        <p class="hint">All measured fairly. Paid plans spend a token budget; free users get a small refilling taste of the powerful models, then drop to the small ones.</p>
+
+        <div class="block">
+          <h3>Free user limits</h3><div class="sub">The taste of powerful models, and the daily small-model cap.</div>
+          <div class="mb"><label class="lbl">Powerful uses before refill</label><input id="freeLarge" class="in" type="number" placeholder="5" /></div>
+          <div class="mb"><label class="lbl">Refill after (hours)</label><input id="largeReset" class="in" type="number" placeholder="7" /></div>
+          <div><label class="lbl">Small-model messages per day</label><input id="freeDaily" class="in" type="number" placeholder="40" /></div>
+        </div>
+
+        <div class="block">
+          <h3>Speed &amp; safety</h3><div class="sub">The silent gap, the spam lock, and the per-minute valve that protects your keys (applies to everyone, even you).</div>
+          <div class="mb"><label class="lbl">Silent gap between messages (sec)</label><input id="rateGap" class="in" type="number" placeholder="5" /></div>
+          <div class="mb"><label class="lbl">Spam lockout (sec)</label><input id="floodLock" class="in" type="number" placeholder="10" /></div>
+          <div class="mb"><label class="lbl">Max requests per minute (safety valve)</label><input id="maxMin" class="in" type="number" placeholder="30" /></div>
+          <div><label class="lbl">Overall daily cap (or type: unlimited)</label><input id="globalCap" class="in" placeholder="unlimited" /></div>
+        </div>
+
+        <div class="block">
+          <h3>Mod Plan</h3><div class="sub">K55 · higher usage with limits.</div>
+          <div class="mini" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <div><label class="lbl">Token budget</label><input id="modBudget" class="in" type="number" placeholder="500000" /></div>
+            <div><label class="lbl">Days</label><input id="modDays" class="in" type="number" placeholder="30" /></div>
+          </div>
+        </div>
+        <div class="block">
+          <h3>Pro Plan</h3><div class="sub">K105 · highest usage with limits.</div>
+          <div class="mini" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <div><label class="lbl">Token budget</label><input id="proBudget" class="in" type="number" placeholder="1500000" /></div>
+            <div><label class="lbl">Days</label><input id="proDays" class="in" type="number" placeholder="30" /></div>
+          </div>
+        </div>
+        <div class="block">
+          <h3>Max Leg Plan</h3><div class="sub">K220 · unlimited (the per-minute safety valve still applies).</div>
+          <div><label class="lbl">Days</label><input id="maxlegDays" class="in" type="number" placeholder="50" /></div>
+        </div>
+
+        <button class="btn gold savebar" onclick="savePlans()">Save Plans &amp; Limits</button>
+        <div class="saved" id="plansSaved"></div>
+      </div>
+
+      <!-- ---------- MESSAGES ---------- -->
+      <div class="pane" id="pane-msgs">
+        <h2 class="sec">Messages</h2>
+        <p class="hint">Every message your users might see, in your own voice.</p>
+        <div class="block"><h3>App paused</h3><textarea id="mPaused" class="ta" style="min-height:60px;"></textarea></div>
+        <div class="block"><h3>Upgrade (on small model)</h3><textarea id="mUpgrade" class="ta" style="min-height:80px;"></textarea></div>
+        <div class="block"><h3>Tokens finished</h3><textarea id="mToken" class="ta" style="min-height:80px;"></textarea></div>
+        <div class="block"><h3>Too many requests</h3><textarea id="mTooMany" class="ta" style="min-height:60px;"></textarea></div>
+        <div class="block"><h3>Daily limit reached</h3><textarea id="mDaily" class="ta" style="min-height:60px;"></textarea></div>
+        <div class="block"><h3>Please sign in</h3><textarea id="mSignin" class="ta" style="min-height:50px;"></textarea></div>
+        <button class="btn gold savebar" onclick="saveMessages()">Save Messages</button>
+        <div class="saved" id="msgsSaved"></div>
+      </div>
+
+      <!-- ---------- USERS ---------- -->
+      <div class="pane" id="pane-users">
+        <h2 class="sec">Users</h2>
+        <p class="hint">When someone pays you on WhatsApp, confirm the money first, then upgrade them here by their email. The panel finds them and asks you to confirm before changing anything - so a typo never upgrades a stranger.</p>
+
+        <div class="block">
+          <h3>Upgrade a user</h3><div class="sub">Type the email they signed up with.</div>
+          <div class="mb"><input id="uEmail" class="in" type="email" inputmode="email" placeholder="user@example.com" /></div>
+          <button class="btn ghost" onclick="findUser()">Find this user</button>
+          <div id="uMsg" class="msg" style="margin-top:10px;"></div>
+
+          <div id="foundCard" style="margin-top:14px;">
+            <div class="block" style="background:var(--bg);">
+              <div style="font-size:13.5px;">Found: <b id="fEmail"></b><span id="fPlan" class="pill free"></span></div>
+              <div class="sub" id="fMeta" style="margin-top:6px;"></div>
+              <div class="mb" style="margin-top:10px;"><label class="lbl">Set plan</label>
+                <select id="uPlan" class="sel">
+                  <option value="free">Free (downgrade)</option>
+                  <option value="mod">Mod Plan (K55)</option>
+                  <option value="pro">Pro Plan (K105)</option>
+                  <option value="maxleg">Max Leg (K220)</option>
+                </select>
+              </div>
+              <button class="btn gold" onclick="activateUser()">Confirm &amp; activate</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="block">
+          <h3>Make me unlimited (CEO)</h3><div class="sub">Sets your own admin account to Max Leg for 100 years - free, forever. The safety valve still applies, as we agreed.</div>
+          <button class="btn ghost" onclick="makeCeo()">Grant myself unlimited</button>
+          <div id="ceoMsg" class="msg" style="margin-top:10px;"></div>
+        </div>
+      </div>
+    </main>
+  </section>
+</div>
+
+<script>
+/* ============================================================================
+   CONFIGURATION  -  baked to your project, nothing to edit
+   ============================================================================ */
+const API_KEY  = "AIzaSyCGbgg5gCKRJNzEdJiWfwGC4eNZfGXkOz0";
+const DB_URL   = "https://autonomous-ai-846f4-default-rtdb.firebaseio.com";
+const ADMIN_UID= "QCC1EdzpJtRLdlcHymD0TPhSWLz2";   // only this account may control the panel
+
+/* Each provider: how many key slots, its default power class, default tier,
+   and a list of MODEL SUGGESTIONS. The model field is free-text with these
+   as suggestions, so you can type ANY model name - even brand-new ones -
+   without me ever needing to update the code. */
+const PROVIDERS = [
+  { id:'gemini',     name:'Google Gemini', count:10, klass:'large', tier:'paid',
+    models:['gemini-2.5-flash','gemini-2.5-flash-lite','gemini-2.5-pro','gemini-3.1-flash','gemini-3.1-pro'] },
+  { id:'deepseek',   name:'Deepseek',      count:5,  klass:'large', tier:'paid',
+    models:['deepseek-chat','deepseek-reasoner'] },
+  { id:'openrouter', name:'OpenRouter',    count:10, klass:'small', tier:'free',
+    models:['meta-llama/llama-3.1-8b-instruct:free','google/gemini-2.0-flash-exp:free','deepseek/deepseek-chat','mistralai/mistral-7b-instruct:free','qwen/qwen-2.5-7b-instruct:free'] },
+  { id:'groq',       name:'Groq',          count:10, klass:'small', tier:'free',
+    models:['llama-3.1-8b-instant','llama-3.3-70b-versatile','gemma2-9b-it','mixtral-8x7b-32768'] },
+  { id:'cerebras',   name:'Cerebras',      count:10, klass:'small', tier:'free',
+    models:['llama3.1-8b','llama-3.3-70b','llama-4-scout-17b-16e-instruct'] },
+  { id:'mistral',    name:'Mistral',       count:10, klass:'small', tier:'free',
+    models:['mistral-small-latest','mistral-large-latest','open-mistral-nemo','ministral-8b-latest'] },
+  { id:'cohere',     name:'Cohere',        count:10, klass:'small', tier:'free',
+    models:['command-r','command-r-plus','command-a-03-2025','command-r7b-12-2024'] },
+  { id:'nvidia',     name:'NVIDIA',        count:3,  klass:'small', tier:'free',
+    models:['meta/llama-3.1-8b-instruct','meta/llama-3.3-70b-instruct','nvidia/llama-3.1-nemotron-70b-instruct'] },
+];
+
+/* ============================================================================
+   SESSION + STORAGE
+   ============================================================================ */
+const mem={}; const store={
+  get(k){try{return localStorage.getItem(k)}catch(e){return mem[k]??null}},
+  set(k,v){try{localStorage.setItem(k,v)}catch(e){mem[k]=v}},
+  del(k){try{localStorage.removeItem(k)}catch(e){delete mem[k]}}
+};
+let sess={ idToken:null, refreshToken:null, expiresAt:0, uid:null, email:null };
+
+async function fbAuth(email,password){
+  const r=await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${API_KEY}`,
+    {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password,returnSecureToken:true})});
+  const d=await r.json();
+  if(!r.ok){ const c=d?.error?.message||''; throw new Error(
+    {INVALID_PASSWORD:'Wrong password.',EMAIL_NOT_FOUND:'No such admin account.',INVALID_LOGIN_CREDENTIALS:'Email or password is incorrect.',INVALID_EMAIL:'Invalid email.'}[c]||'Login failed. Try again.'); }
+  return d;
+}
+async function refresh(){
+  if(!sess.refreshToken) return false;
+  try{
+    const r=await fetch(`https://securetoken.googleapis.com/v1/token?key=${API_KEY}`,
+      {method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+       body:`grant_type=refresh_token&refresh_token=${encodeURIComponent(sess.refreshToken)}`});
+    const d=await r.json(); if(!r.ok||!d.id_token) return false;
+    sess.idToken=d.id_token; sess.refreshToken=d.refresh_token; sess.expiresAt=Date.now()+(+d.expires_in||3600)*1000;
+    store.set('wod_admin',JSON.stringify(sess)); return true;
+  }catch(e){ return false; }
+}
+async function fresh(){ if(Date.now()>sess.expiresAt-60000) return await refresh(); return true; }
+
+/* ============================================================================
+   FIREBASE DATABASE HELPERS (admin token authenticates every call)
+   ============================================================================ */
+async function dbGet(path){
+  await fresh();
+  const r=await fetch(`${DB_URL}/${path}.json?auth=${sess.idToken}`);
+  if(!r.ok) throw new Error('Read failed ('+r.status+')'); return await r.json();
+}
+async function dbPatch(path,obj){
+  await fresh();
+  const r=await fetch(`${DB_URL}/${path}.json?auth=${sess.idToken}`,
+    {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(obj)});
+  if(!r.ok) throw new Error('Save failed ('+r.status+')'); return await r.json();
+}
+async function dbPut(path,val){
+  await fresh();
+  const r=await fetch(`${DB_URL}/${path}.json?auth=${sess.idToken}`,
+    {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(val)});
+  if(!r.ok) throw new Error('Save failed ('+r.status+')'); return await r.json();
+}
+
+/* ============================================================================
+   LOGIN
+   ============================================================================ */
+async function login(){
+  const email=document.getElementById('gEmail').value.trim();
+  const pass=document.getElementById('gPass').value;
+  const m=document.getElementById('gMsg'); const btn=document.getElementById('gBtn');
+  if(!email||!pass){ m.textContent='Enter your email and password.'; m.className='msg err'; return; }
+  btn.disabled=true; btn.textContent='Entering…'; m.textContent='';
+  try{
+    const d=await fbAuth(email,pass);
+    if(d.localId!==ADMIN_UID){ throw new Error('This account is not the admin. Access denied.'); }
+    sess={ idToken:d.idToken, refreshToken:d.refreshToken, expiresAt:Date.now()+(+d.expiresIn||3600)*1000, uid:d.localId, email:d.email||email };
+    store.set('wod_admin',JSON.stringify(sess));
+    enterShell();
+  }catch(e){ m.textContent=e.message; m.className='msg err'; }
+  finally{ btn.disabled=false; btn.textContent='Enter control room'; }
+}
+function logout(){ store.del('wod_admin'); sess={idToken:null,refreshToken:null,expiresAt:0,uid:null,email:null};
+  document.getElementById('shell').style.display='none'; document.getElementById('gate').style.display='flex';
+  document.getElementById('gPass').value=''; }
+
+async function enterShell(){
+  document.getElementById('gate').style.display='none';
+  document.getElementById('shell').style.display='flex';
+  buildProviders();
+  await loadAll();
+}
+
+/* ============================================================================
+   TABS
+   ============================================================================ */
+function tab(t){
+  document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
+  document.querySelectorAll('.pane').forEach(p=>p.classList.remove('on'));
+  document.getElementById('pane-'+t).classList.add('on');
+  document.querySelector('main').scrollTop=0;
+}
+
+/* ============================================================================
+   BUILD PROVIDER + KEY ROWS  (generated from the PROVIDERS list above)
+   ============================================================================ */
+function buildProviders(){
+  const host=document.getElementById('provList');
+  host.innerHTML = PROVIDERS.map(p=>{
+    // one shared datalist of model suggestions per provider
+    const dl = `<datalist id="dl-${p.id}">${p.models.map(m=>`<option value="${m}">`).join('')}</datalist>`;
+    const rows = Array.from({length:p.count}).map((_,i)=>keyRowHtml(p,i)).join('');
+    return `${dl}
+      <div class="prov" id="prov-${p.id}">
+        <div class="prov-head" onclick="toggleProv('${p.id}')">
+          <label class="switch" onclick="event.stopPropagation()"><input type="checkbox" id="prov-on-${p.id}" checked><span class="slot"></span><span class="knob"></span></label>
+          <span class="nm">${p.name}</span>
+          <span class="badge">${p.count} slots</span>
+          <svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div class="prov-body">${rows}</div>
+      </div>`;
+  }).join('');
+}
+function keyRowHtml(p,i){
+  return `<div class="keyrow">
+    <div class="top-r">
+      <label class="switch"><input type="checkbox" id="k-${p.id}-${i}-on" checked><span class="slot"></span><span class="knob"></span></label>
+      <span class="kn">Key ${i+1}</span>
+    </div>
+    <input class="in" id="k-${p.id}-${i}-key" placeholder="paste API key (leave blank if unused)" autocomplete="off" />
+    <div class="mini">
+      <div class="miniwrap"><label>Model</label><input class="in" id="k-${p.id}-${i}-model" list="dl-${p.id}" placeholder="model name" autocomplete="off" /></div>
+      <div class="miniwrap"><label>Power</label>
+        <select class="sel" id="k-${p.id}-${i}-class">
+          <option value="large" ${p.klass==='large'?'selected':''}>Powerful</option>
+          <option value="small" ${p.klass==='small'?'selected':''}>Small</option>
+        </select></div>
+      <div class="miniwrap"><label>Billing</label>
+        <select class="sel" id="k-${p.id}-${i}-tier">
+          <option value="free" ${p.tier==='free'?'selected':''}>Free</option>
+          <option value="paid" ${p.tier==='paid'?'selected':''}>Paid</option>
+        </select></div>
+    </div>
+  </div>`;
+}
+function toggleProv(id){ document.getElementById('prov-'+id).classList.toggle('open'); }
+
+/* ============================================================================
+   LOAD EVERYTHING from Firebase into the panel
+   ============================================================================ */
+async function loadAll(){
+  let cfg={};
+  try{ cfg=await dbGet('admin_config')||{}; }catch(e){ cfg={}; }
+
+  // Dashboard
+  document.getElementById('appOn').checked = !(cfg.usage && cfg.usage.status==='off');
+
+  // Knowledge
+  document.getElementById('sysPrompt').value = cfg.system_prompt||'';
+  document.getElementById('rules').value = cfg.rules||'';
+  document.getElementById('knowledge').value = cfg.knowledge||'';
+
+  // Plans & limits
+  setVal('freeLarge', cfg.free_large_limit ?? 5);
+  setVal('largeReset', cfg.large_reset_hours ?? 7);
+  setVal('freeDaily', cfg.free_daily_limit ?? 40);
+  setVal('rateGap', cfg.rate_gap_seconds ?? 5);
+  setVal('floodLock', cfg.flood_lockout_seconds ?? 10);
+  setVal('maxMin', cfg.max_per_minute ?? 30);
+  setVal('globalCap', cfg.daily_global_cap ?? 'unlimited');
+  const pl=cfg.plans||{};
+  setVal('modBudget', pl.mod?.budget ?? 500000); setVal('modDays', pl.mod?.days ?? 30);
+  setVal('proBudget', pl.pro?.budget ?? 1500000); setVal('proDays', pl.pro?.days ?? 30);
+  setVal('maxlegDays', pl.maxleg?.days ?? 50);
+
+  // Messages
+  const m=cfg.messages||{}; const u=cfg.usage||{};
+  setVal('mPaused', u.message ?? 'This app will be back in a minute.');
+  setVal('mUpgrade', m.upgrade_small ?? "You're using a small model, that's not powerful. Upgrade to Pro for unlimited access to higher models like Deepseek V4 Pro and Gemini 3.1 Pro.");
+  setVal('mToken', m.token_finished ?? "You've used all your plan tokens. You can simply top up again and keep chatting. Until then, you'll use the less powerful models.");
+  setVal('mTooMany', m.too_many ?? "You're sending too many requests at the same time. Please wait a few seconds and try again.");
+  setVal('mDaily', m.daily_done ?? "You've reached today's free limit. Please come back tomorrow, or upgrade for more.");
+  setVal('mSignin', m.signin ?? 'Please sign in to continue chatting.');
+
+  // Keys + provider switches
+  const ap=cfg.active_providers||{}; const keys=cfg.keys||{};
+  PROVIDERS.forEach(p=>{
+    const provOn=document.getElementById('prov-on-'+p.id); if(provOn) provOn.checked = ap[p.id]!==false;
+    const arr = Array.isArray(keys[p.id]) ? keys[p.id] : Object.values(keys[p.id]||{});
+    arr.forEach((k,i)=>{
+      if(i>=p.count||!k) return;
+      setVal(`k-${p.id}-${i}-key`, k.key||'');
+      setVal(`k-${p.id}-${i}-model`, k.model||'');
+      setVal(`k-${p.id}-${i}-class`, k.class||p.klass);
+      setVal(`k-${p.id}-${i}-tier`, k.tier||p.tier);
+      const on=document.getElementById(`k-${p.id}-${i}-on`); if(on) on.checked = k.enabled!==false;
+    });
+  });
+
+  loadStats();
+}
+function setVal(id,v){ const el=document.getElementById(id); if(el!=null&&el.value!==undefined) el.value=v; }
+
+/* ============================================================================
+   SAVE actions  (each writes only its own slice of admin_config)
+   ============================================================================ */
+function flash(id,text){ const el=document.getElementById(id); el.textContent=text; el.style.color='var(--ok)'; setTimeout(()=>el.textContent='',2500); }
+function flashErr(id,text){ const el=document.getElementById(id); el.textContent=text; el.style.color='var(--danger)'; setTimeout(()=>el.textContent='',4000); }
+
+async function saveUsage(){
+  try{
+    const on=document.getElementById('appOn').checked;
+    await dbPatch('admin_config/usage',{ status:on?'on':'off', message:document.getElementById('mPaused').value||'This app will be back in a minute.' });
+    flash('dashSaved', on?'App is now LIVE':'App is now PAUSED');
+  }catch(e){ flashErr('dashSaved','Could not save: '+e.message); }
+}
+async function saveKnowledge(){
+  try{
+    await dbPatch('admin_config',{
+      system_prompt:document.getElementById('sysPrompt').value,
+      rules:document.getElementById('rules').value,
+      knowledge:document.getElementById('knowledge').value,
+    });
+    flash('knowSaved','Saved ✓');
+  }catch(e){ flashErr('knowSaved','Could not save: '+e.message); }
+}
+async function savePlans(){
+  try{
+    const gc=document.getElementById('globalCap').value.trim();
+    await dbPatch('admin_config',{
+      free_large_limit:+document.getElementById('freeLarge').value||5,
+      large_reset_hours:+document.getElementById('largeReset').value||7,
+      free_daily_limit:+document.getElementById('freeDaily').value||40,
+      rate_gap_seconds:+document.getElementById('rateGap').value||5,
+      flood_lockout_seconds:+document.getElementById('floodLock').value||10,
+      max_per_minute:+document.getElementById('maxMin').value||30,
+      daily_global_cap: (gc===''||gc.toLowerCase()==='unlimited')?'unlimited':(+gc||'unlimited'),
+      plans:{
+        mod:{ budget:+document.getElementById('modBudget').value||500000, days:+document.getElementById('modDays').value||30 },
+        pro:{ budget:+document.getElementById('proBudget').value||1500000, days:+document.getElementById('proDays').value||30 },
+        maxleg:{ days:+document.getElementById('maxlegDays').value||50 },
+      }
+    });
+    flash('plansSaved','Saved ✓');
+  }catch(e){ flashErr('plansSaved','Could not save: '+e.message); }
+}
+async function saveMessages(){
+  try{
+    await dbPatch('admin_config/messages',{
+      upgrade_small:document.getElementById('mUpgrade').value,
+      token_finished:document.getElementById('mToken').value,
+      too_many:document.getElementById('mTooMany').value,
+      daily_done:document.getElementById('mDaily').value,
+      signin:document.getElementById('mSignin').value,
+    });
+    await dbPatch('admin_config/usage',{ message:document.getElementById('mPaused').value });
+    flash('msgsSaved','Saved ✓');
+  }catch(e){ flashErr('msgsSaved','Could not save: '+e.message); }
+}
+async function saveKeys(){
+  try{
+    const active={}; const keys={};
+    PROVIDERS.forEach(p=>{
+      active[p.id]=document.getElementById('prov-on-'+p.id).checked;
+      const arr=[];
+      for(let i=0;i<p.count;i++){
+        const key=document.getElementById(`k-${p.id}-${i}-key`).value.trim();
+        if(!key) continue;                       // skip empty slots
+        arr.push({
+          key,
+          model:document.getElementById(`k-${p.id}-${i}-model`).value.trim()||p.models[0],
+          enabled:document.getElementById(`k-${p.id}-${i}-on`).checked,
+          class:document.getElementById(`k-${p.id}-${i}-class`).value,
+          tier:document.getElementById(`k-${p.id}-${i}-tier`).value,
+        });
+      }
+      keys[p.id]=arr;
+    });
+    await dbPatch('admin_config',{ active_providers:active, keys:keys });
+    flash('keysSaved','All keys saved ✓');
+  }catch(e){ flashErr('keysSaved','Could not save: '+e.message); }
+}
+
+/* ============================================================================
+   STATS  (light - reads counters + counts billing records)
+   ============================================================================ */
+async function loadStats(){
+  try{
+    const today=new Date().toISOString().slice(0,10);
+    const t=await dbGet(`admin_config/counters/${today}/total`).catch(()=>0);
+    document.getElementById('statToday').textContent = (Number(t)||0);
+    const b=await dbGet('billing').catch(()=>null);
+    document.getElementById('statUsers').textContent = b?Object.keys(b).length:0;
+  }catch(e){ /* stats are optional, never block */ }
+}
+
+/* ============================================================================
+   USERS  -  find by email, confirm, activate
+   ============================================================================ */
+let foundUid=null, foundData=null;
+async function findUser(){
+  const email=document.getElementById('uEmail').value.trim().toLowerCase();
+  const m=document.getElementById('uMsg'); document.getElementById('foundCard').style.display='none';
+  if(!email){ m.textContent='Type an email first.'; m.className='msg err'; return; }
+  m.textContent='Searching…'; m.className='msg';
+  try{
+    const all=await dbGet('billing')||{};
+    let hitUid=null, hit=null;
+    for(const uid in all){ if((all[uid].email||'').toLowerCase()===email){ hitUid=uid; hit=all[uid]; break; } }
+    if(!hitUid){ m.textContent='No user found with that email. They must sign in and send at least one message first.'; m.className='msg err'; return; }
+    foundUid=hitUid; foundData=hit; m.textContent='';
+    document.getElementById('fEmail').textContent=hit.email||email;
+    const plan=hit.plan||'free';
+    const pill=document.getElementById('fPlan'); pill.textContent=plan.toUpperCase();
+    pill.className='pill '+(plan==='free'?'free':'paid');
+    const exp=hit.planExpiry?new Date(+hit.planExpiry).toLocaleDateString():'—';
+    document.getElementById('fMeta').textContent=`Current plan: ${plan} · expires ${exp} · tokens used: ${hit.tokensUsed||0}`;
+    document.getElementById('uPlan').value=plan;
+    document.getElementById('foundCard').style.display='block';
+  }catch(e){ m.textContent='Search failed: '+e.message; m.className='msg err'; }
+}
+async function activateUser(){
+  if(!foundUid) return;
+  const m=document.getElementById('uMsg');
+  const plan=document.getElementById('uPlan').value;
+  try{
+    const cfg=await dbGet('admin_config/plans')||{};
+    const now=Date.now(); let patch={ plan, tokensUsed:0 };
+    if(plan==='mod'){ patch.tokenBudget=cfg.mod?.budget||500000; patch.planExpiry=now+(cfg.mod?.days||30)*86400000; }
+    else if(plan==='pro'){ patch.tokenBudget=cfg.pro?.budget||1500000; patch.planExpiry=now+(cfg.pro?.days||30)*86400000; }
+    else if(plan==='maxleg'){ patch.tokenBudget=0; patch.planExpiry=now+(cfg.maxleg?.days||50)*86400000; }
+    else { patch.tokenBudget=0; patch.planExpiry=0; }   // free
+    await dbPatch('billing/'+foundUid, patch);
+    m.textContent=`Done. ${document.getElementById('fEmail').textContent} is now on the ${plan.toUpperCase()} plan.`;
+    m.className='msg ok';
+    document.getElementById('foundCard').style.display='none';
+    loadStats();
+  }catch(e){ m.textContent='Activation failed: '+e.message; m.className='msg err'; }
+}
+async function makeCeo(){
+  const m=document.getElementById('ceoMsg');
+  try{
+    const now=Date.now();
+    await dbPatch('billing/'+ADMIN_UID,{ email:sess.email, plan:'maxleg', tokenBudget:0, tokensUsed:0,
+      planExpiry: now + 100*365*86400000 });   // ~100 years
+    m.textContent='Done. You now have unlimited access forever.'; m.className='msg ok';
+  }catch(e){ m.textContent='Failed: '+e.message; m.className='msg err'; }
+}
+
+/* ============================================================================
+   STARTUP  -  remember the admin between visits
+   ============================================================================ */
+(async function(){
+  try{ const raw=store.get('wod_admin'); if(raw){ const s=JSON.parse(raw); if(s&&s.refreshToken&&s.uid===ADMIN_UID){ sess=s; if(await refresh()){ enterShell(); return; } } } }catch(e){}
+  document.getElementById('gEmail').focus();
+})();
+</script>
+</body>
+</html>
